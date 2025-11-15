@@ -1,7 +1,0 @@
-project_id = "lwsymarceqoxxfptksfo"
-
-[functions.transcribe-audio]
-verify_jwt = false
-
-[functions.analyze-highlights]
-verify_jwt = false

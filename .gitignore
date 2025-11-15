@@ -30,3 +30,7 @@ Thumbs.db
 
 # ───── Local storage / cache ─────
 *.cache
+
+
+# Old config
+supabase/
