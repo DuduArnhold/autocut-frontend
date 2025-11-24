@@ -1,10 +1,30 @@
+# ────────────────────────────────
+# AutoCut - PRO .gitignore
+# React + Vite + TypeScript + FFmpeg WASM
+# ────────────────────────────────
+
 # ───── Dependencies ─────
 node_modules/
 .pnpm-store/
+.pnp/
+.pnp.js
 
 # ───── Build output ─────
 dist/
 build/
+out/
+*.vite
+
+# ───── Temp / Cache ─────
+*.cache
+.cache/
+.vite/
+vite.config.ts.timestamp*
+vite.config.js.timestamp*
+
+# WebAssembly cache
+*.wasm
+*.worker.js
 
 # ───── Logs ─────
 npm-debug.log*
@@ -14,23 +34,52 @@ pnpm-debug.log*
 
 # ───── Environment ─────
 .env
-.env.local
-.env.development
-.env.production
+.env.*
+!.env.example
 
 # ───── Editor files ─────
 .vscode/
 .idea/
 *.swp
 *.swo
+*.swn
+*.swm
+
+# Editor backups
+*~
 
 # ───── OS files ─────
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # ───── Local storage / cache ─────
-*.cache
+*.local
+*.temp
+tmp/
+temp/
 
+# ───── FFmpeg wasm runtime files ─────
+ffmpeg-core.js
+ffmpeg-core.wasm
+ffmpeg-core.worker.js
+ffmpeg-core.temp.json
+ffmpeg.wasm
+ffmpeg.worker.js
 
-# Old config
+# Somente ignore se forem baixados localmente:
+public/ffmpeg-core.js
+public/ffmpeg-core.wasm
+public/ffmpeg-core.worker.js
+
+# ───── Coverage ─────
+coverage/
+*.lcov
+
+# ───── Misc ─────
+*.tsbuildinfo
+*.tgz
+*.bak
+
+# ───── Old config ─────
 supabase/
