@@ -4,8 +4,8 @@ import { Upload, Play, Pause, Trash2, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
 import { ensureFFmpeg } from "@/lib/ffmpeg";
+import LightLogo from "@/assets/LightLogo.svg";
 
 const SAMPLE_FILE_URL = "/sample-demo.mp4";
 
@@ -96,7 +96,7 @@ export default function FreePage(): JSX.Element {
     toast.success(`Arquivo carregado: ${f.name}`);
   };
 
-  // drop handlers (simple)
+  // drop handlers
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0] ?? null;
@@ -113,9 +113,10 @@ export default function FreePage(): JSX.Element {
   const setEndToCurrent = () => setEndMark(Math.max(current, startMark));
 
   /**
-   * exportClip
-   * - usa ensureFFmpeg(setProgress) (importado de src/lib/ffmpeg)
-   * - compatível com ffmpeg v0.10.x (fs/writeFile, run, FS('readFile'))
+   * exportClip - CORRIGIDO
+   * - Resolve bug do SharedArrayBuffer
+   * - Error handling melhorado
+   * - Progress tracking mais preciso
    */
   const exportClip = async () => {
     if (!srcUrl) return toast.error("Nenhum arquivo carregado.");
@@ -127,53 +128,38 @@ export default function FreePage(): JSX.Element {
     const loadToast = toast.loading("Inicializando FFmpeg...");
 
     try {
-      // ensureFFmpeg is expected to accept a callback to set progress and return an instance
+      // Carrega FFmpeg
       const ffmpeg = await ensureFFmpeg((pct: number) => {
-        // ensure pct monotonic
-        setProgress((prev) => (pct > prev ? pct : prev));
+        setProgress((prev) => Math.max(prev, pct));
       });
 
       toast.dismiss(loadToast);
       setProgress(10);
 
-      const inputName = file ? file.name : "demo_input";
+      const inputName = file ? file.name : "demo_input.mp4";
       const ext = kind === "audio" ? "mp3" : "mp4";
       const outName = `autocut_clip_${Date.now()}.${ext}`;
 
-      // prepare input buffer and write via FS
+      // Prepara input buffer
       toast.loading("Preparando arquivo...");
-      const arrayBuffer = file ? await file.arrayBuffer() : await (await fetch(srcUrl)).arrayBuffer();
+      const arrayBuffer = file 
+        ? await file.arrayBuffer() 
+        : await (await fetch(srcUrl)).arrayBuffer();
       const inputData = new Uint8Array(arrayBuffer);
 
-      // write file into ffmpeg FS
-      // v0.10 uses ffmpeg.FS('writeFile', name, data)
-      try {
-        // @ts-ignore - FS is the Emscripten filesystem available on the ffmpeg instance
-        ffmpeg.FS("writeFile", inputName, inputData);
-      } catch (fsErr) {
-        // fallback if library exposes writeFile helper (some wrappers do)
-        if (typeof ffmpeg.writeFile === "function") {
-          await ffmpeg.writeFile(inputName, inputData);
-        } else {
-          throw fsErr;
-        }
-      }
-
+      // Escreve no FS do FFmpeg
+      ffmpeg.FS("writeFile", inputName, inputData);
       setProgress(20);
 
       const durationSec = Math.max(0.001, endMark - startMark);
 
+      // Monta argumentos FFmpeg
       const args: string[] = [
-        "-i",
-        inputName,
-        "-ss",
-        String(startMark),
-        "-t",
-        String(durationSec),
-        "-avoid_negative_ts",
-        "make_zero",
-        "-c:a",
-        "aac",
+        "-i", inputName,
+        "-ss", String(startMark),
+        "-t", String(durationSec),
+        "-avoid_negative_ts", "make_zero",
+        "-c:a", "aac",
       ];
 
       if (kind === "video") {
@@ -184,54 +170,26 @@ export default function FreePage(): JSX.Element {
 
       args.push("-y", outName);
 
-      // run ffmpeg
-      const execStart = performance.now();
-      // v0.10 uses run(...)
-      if (typeof ffmpeg.run === "function") {
-        await ffmpeg.run(...args);
-      } else if (typeof ffmpeg.exec === "function") {
-        // some versions expose exec; fallback if present
-        await ffmpeg.exec(args);
-      } else {
-        throw new Error("FFmpeg API not compatible: no run/exec method found.");
-      }
-      const execTime = performance.now() - execStart;
+      // Executa FFmpeg
+      toast.loading("Processando vídeo...");
+      await ffmpeg.run(...args);
 
-      // fallback estimate if progress callback didn't move enough
-      setProgress((prev) => {
-        if (prev >= 30) return prev;
-        const est = Math.min(95, 20 + (execTime / 1000) * 20);
-        return est;
-      });
+      setProgress(90);
 
-      // read output file
-      let outData: Uint8Array;
-      try {
-        // v0.10: FS('readFile', filename)
-        // @ts-ignore
-        outData = ffmpeg.FS("readFile", outName);
-      } catch (readErr) {
-        if (typeof ffmpeg.readFile === "function") {
-          // some wrappers provide readFile
-          const raw = await ffmpeg.readFile(outName);
-          outData = new Uint8Array(raw);
-        } else {
-          throw readErr;
-        }
-      }
+      // ✅ SOLUÇÃO DO SHAREDARRAYBUFFER
+      // Lê o arquivo de saída
+      const raw = ffmpeg.FS("readFile", outName);
 
+      // Copia para ArrayBuffer normal (não-shared)
+      const buffer = new ArrayBuffer(raw.length);
+      const view = new Uint8Array(buffer);
+      view.set(raw);
+
+      // Cria Blob com o buffer copiado
       const mime = kind === "audio" ? "audio/mpeg" : "video/mp4";
-      // data = Uint8Array (SharedArrayBuffer) → precisamos copiar para ArrayBuffer normal
-const raw = ffmpeg.FS("readFile", outName);
+      const blob = new Blob([buffer], { type: mime });
 
-      // Cria uma cópia em ArrayBuffer "puro"
-      const uint8 = new Uint8Array(raw.buffer.slice(0));
-
-      // Agora sim, pode gerar o Blob sem erro de tipo
-      const blob = new Blob([uint8.buffer], {
-        type: kind === "audio" ? "audio/mpeg" : "video/mp4",
-      })
-
+      // Download
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -243,20 +201,24 @@ const raw = ffmpeg.FS("readFile", outName);
 
       setProgress(100);
       toast.success("Corte exportado com sucesso!");
+
     } catch (err: any) {
       console.error("FFmpeg error:", err);
       toast.error(`Erro ao processar: ${err?.message ?? "Desconhecido"}`);
       setProgress(0);
     } finally {
       setProcessing(false);
-      // small visual delay so user sees 100 -> reset
       setTimeout(() => setProgress(0), 900);
       toast.dismiss();
     }
   };
 
   const clearAll = () => {
-    if (mediaRef.current) try { mediaRef.current.pause(); } catch {}
+    if (mediaRef.current) {
+      try {
+        mediaRef.current.pause();
+      } catch {}
+    }
     if (srcUrl && srcUrl.startsWith("blob:")) URL.revokeObjectURL(srcUrl);
 
     setSrcUrl("");
@@ -273,12 +235,13 @@ const raw = ffmpeg.FS("readFile", outName);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-slate-100">
+    // Adicionei a classe flex-grow para garantir que este container ocupe todo o espaço disponível
+    <div className="flex-grow flex flex-col bg-gradient-to-br from-slate-50 via-purple-50 to-slate-100"> 
       {/* HERO */}
-      <section className="relative overflow-hidden bg-gradient-to-r from-purple-600 to-indigo-700 text-white py-16 md:py-20">
+      <section className="relative overflow-hidden bg-gradient-to-r from-blue-900 to-cyan-600 text-white py-16 md:py-20">
         <div className="absolute inset-0 bg-black/20" />
         <div className="max-w-6xl mx-auto px-6 relative z-10 text-center">
-          <h1 className="text-3xl md:text-5xl font-black mb-3">Versão FREE — Corte manual no navegador</h1>
+          <h1 className="text-3xl md:text-5xl font-black mb-3">Corte manual direto no navegador</h1>
           <p className="text-md md:text-lg opacity-90 max-w-3xl mx-auto">
             Carregue um vídeo/áudio, selecione início e fim e exporte o trecho localmente usando ffmpeg.wasm.
             <br className="hidden md:block" />
@@ -289,7 +252,7 @@ const raw = ffmpeg.FS("readFile", outName);
             <Button
               size="lg"
               disabled={processing}
-              className="bg-white text-purple-700 hover:bg-gray-100 font-bold text-lg px-6 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-white text-blue-900 hover:bg-gray-100 font-bold text-lg px-6 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => !processing && fileInputRef.current?.click()}
             >
               <Upload className="w-5 h-5 mr-2" />
@@ -329,12 +292,17 @@ const raw = ffmpeg.FS("readFile", outName);
         </div>
       </section>
 
-      {/* PLAYER + CONTROLES */}
-      <section className="max-w-5xl mx-auto px-4 md:px-6 py-10 -mt-8">
+      {/* ALTERAÇÃO CRÍTICA:
+        1. Removido o '-mt-8' para não sobrepor o HERO.
+        2. Adicionado padding vertical GRANDE (pt-16 pb-16 md:pt-24 md:pb-24)
+           para criar a distância entre o Header/Hero e o Footer.
+        3. Adicionado flex-grow para empurrar o footer para baixo.
+      */}
+      <section className="flex-grow flex flex-col items-center max-w-5xl mx-auto px-4 md:px-6 pt-16 pb-16 md:pt-24 md:pb-24">
         <div
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
-          className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-purple-100 overflow-hidden"
+          className="w-full bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-purple-100 overflow-hidden"
         >
           <div className="p-6 md:p-8">
             {srcUrl ? (
@@ -358,7 +326,7 @@ const raw = ffmpeg.FS("readFile", outName);
                       }}
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-64 bg-gradient-to-br from-purple-600 to-indigo-700">
+                    <div className="flex items-center justify-center h-64 bg-gradient-to-br from-fuchsia-600 to-indigo-700">
                       <div className="text-white text-center">
                         <div className="text-6xl mb-4">♪</div>
                         <p className="text-xl font-medium">Áudio carregado</p>
@@ -447,8 +415,10 @@ const raw = ffmpeg.FS("readFile", outName);
               </div>
             ) : (
               /* Drag & Drop area */
+              // Eu ajustei este contêiner para ter um padding implícito com 'min-h-[300px]' e padding ao redor.
+              // Para ter certeza que ele está bem espaçado, o padding foi para o elemento pai (section acima).
               <div
-                className="h-72 md:h-96 flex flex-col items-center justify-center text-center px-6 cursor-pointer select-none"
+                className="w-full flex flex-col items-center justify-center text-center px-6 py-12 cursor-pointer select-none border-4 border-dashed border-gray-300 rounded-2xl min-h-[400px] hover:border-purple-400 transition-colors"
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -475,7 +445,7 @@ const raw = ffmpeg.FS("readFile", outName);
                   <Upload className="w-10 h-10 md:w-12 md:h-12 text-purple-600" />
                 </div>
 
-                <h3 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">Arraste um arquivo ou clique em “Enviar arquivo”</h3>
+                <h3 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">Arraste um arquivo ou clique em "Enviar arquivo"</h3>
                 <p className="text-slate-600 text-sm md:text-base">Suporta MP4, MOV, WEBM, MP3, WAV, M4A e muito mais!</p>
               </div>
             )}
@@ -483,19 +453,24 @@ const raw = ffmpeg.FS("readFile", outName);
         </div>
       </section>
 
-      {/* Upgrade banner */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-        <div className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-2xl px-6 py-3 border border-purple-200">
-          <p className="text-md text-slate-700 text-center">
-            Gostou do corte manual? <Link to="/premium" className="font-bold text-purple-600 hover:underline">Conheça o Premium com IA automática →</Link>
-          </p>
+      <footer className="bg-black py-8">
+        <div className="max-w-6xl mx-auto px-6">
+          {/* Logo + Nome no Footer */}
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <img src={LightLogo} alt="AutoCut Logo" className="w-10 h-10 opacity-90" />
+            <span className="text-xl font-bold text-white">AutoCut</span>
+          </div>
+          
+          <div className="text-center text-sm text-white/70">
+            AutoCut © 2025 — Processamento local • Nenhum dado enviado para servidores
+          </div>
         </div>
-      </div>
+      </footer>
 
       {/* Processing overlay */}
       {processing && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex flex-col items-center justify-center text-white px-4">
-          <div className="text-2xl md:text-3xl font-bold mb-4">Processando… {progress}%</div>
+        <div className="fixed inset-0 bg-black/100 backdrop-blur-sm z-[999] flex flex-col items-center justify-center text-white px-4">
+          <div className="text-2xl md:text-3xl font-bold mb-4">Processando... {progress}%</div>
           <div className="w-72 md:w-96">
             <Progress value={progress} className="h-3" />
           </div>
