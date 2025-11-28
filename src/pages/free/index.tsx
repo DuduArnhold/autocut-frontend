@@ -6,6 +6,8 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { ensureFFmpeg } from "@/lib/ffmpeg";
 import LightLogo from "@/assets/LightLogo.svg";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const SAMPLE_FILE_URL = "/sample-demo.mp4";
 
@@ -30,6 +32,7 @@ export default function FreePage(): JSX.Element {
   const [endMark, setEndMark] = useState<number>(0);
   const [progress, setProgress] = useState<number>(0);
   const [processing, setProcessing] = useState<boolean>(false);
+  const [vertical, setVertical] = useState<boolean>(false);
 
   // Cleanup blob URL on unmount or change
   useEffect(() => {
@@ -120,94 +123,123 @@ export default function FreePage(): JSX.Element {
    * - Error handling melhorado
    * - Progress tracking mais preciso
    */
-const exportClip = async () => {
-  if (!srcUrl) return toast.error("Nenhum arquivo carregado.");
-  if (endMark <= startMark) return toast.error("Fim deve ser maior que o início.");
-  if (duration <= 0) return toast.error("Duração inválida.");
+  const exportClip = async () => {
+    if (!srcUrl) return toast.error("Nenhum arquivo carregado.");
+    if (endMark <= startMark) return toast.error("Fim deve ser maior que o início.");
+    if (duration <= 0) return toast.error("Duração inválida.");
 
-  setProcessing(true);
-  setProgress(0);
+    setProcessing(true);
+    setProgress(0);
 
-  const loadToast = toast.loading("Inicializando FFmpeg...");
+    const loadToast = toast.loading("Inicializando FFmpeg...");
 
-  try {
-    const ffmpeg = await ensureFFmpeg((pct: number) => {
-      const safe = Math.min(100, Math.max(0, pct));
-      setProgress(safe);
-    });
+    try {
+      const ffmpeg = await ensureFFmpeg((pct: number) => {
+        const safe = Math.min(100, Math.max(0, pct));
+        setProgress(safe);
+      });
 
-    toast.dismiss(loadToast);
+      toast.dismiss(loadToast);
 
-    const inputName = file ? file.name : "demo_input.mp4";
-    const ext = kind === "audio" ? "mp3" : "mp4";
-    const outName = `autocut_clip_${Date.now()}.${ext}`;
+      const inputName = file ? file.name : "demo_input.mp4";
+      const ext = kind === "audio" ? "mp3" : "mp4";
+      const outName = `autocut_clip_${Date.now()}.${ext}`;
 
-    // Ler input
-    const arrayBuffer = file
-      ? await file.arrayBuffer()
-      : await (await fetch(srcUrl)).arrayBuffer();
+      // Ler input
+      const arrayBuffer = file
+        ? await file.arrayBuffer()
+        : await (await fetch(srcUrl)).arrayBuffer();
 
-    ffmpeg.FS("writeFile", inputName, new Uint8Array(arrayBuffer));
+      ffmpeg.FS("writeFile", inputName, new Uint8Array(arrayBuffer));
 
-    const durationSec = Math.max(0.001, endMark - startMark);
+      const durationSec = Math.max(0.001, endMark - startMark);
 
-    // Argumentos, está muito demorado pra exportar e baixar o video? e existe maneira de otimizar? e se exportassemos o video em formato já pra rells e tiktok vertical?
-    const args: string[] = [
-      "-i", inputName,
-      "-ss", String(startMark),
-      "-t", String(durationSec),
-      "-avoid_negative_ts", "make_zero",
-      "-c:a", "aac",
-    ];
+      // Argumentos OTIMIZADOS
+      const args: string[] = [
+        "-i", inputName,
+        "-ss", String(startMark),
+        "-t", String(durationSec),
+        "-avoid_negative_ts", "make_zero",
+      ];
 
-    if (kind === "video") {
-      args.push("-c:v", "libx264");
-    } else {
-      args.push("-vn");
+      if (vertical && kind === "video") {
+        // MODO LENTO: Recodificar para Vertical (9:16)
+        // Lógica Inteligente: Mantém a altura original e corta a largura para 9:16
+        // Se a altura for muito pequena, definimos um mínimo razoável, mas evitamos upscale gigante.
+
+        // Recupera dimensões originais do elemento de vídeo
+        const videoEl = mediaRef.current as HTMLVideoElement;
+        const originalHeight = videoEl.videoHeight || 720;
+        const originalWidth = videoEl.videoWidth || 1280;
+
+        // Alvo: 9:16
+        // Exemplo: Se altura é 1080, largura alvo deve ser 607.5 -> 608
+        // Exemplo: Se altura é 360, largura alvo deve ser 202.5 -> 202
+
+        // Vamos garantir que a altura seja par (requisito do x264)
+        const targetH = originalHeight % 2 === 0 ? originalHeight : originalHeight - 1;
+
+        // Calcula largura para 9:16 (targetH * 9 / 16)
+        let targetW = Math.floor((targetH * 9) / 16);
+        if (targetW % 2 !== 0) targetW -= 1; // Garante par
+
+        // O filtro crop corta o centro. 
+        // Sintaxe: crop=w:h:x:y
+        // Mas primeiro precisamos garantir que o vídeo preenche a altura.
+        // Se o vídeo original for wide (16:9), a altura já é o limitante.
+        // Então apenas cortamos as laterais.
+
+        args.push("-vf", `crop=${targetW}:${targetH}`);
+        args.push("-c:v", "libx264");
+        args.push("-preset", "ultrafast");
+        args.push("-c:a", "aac");
+      } else {
+        // MODO RÁPIDO: Stream Copy (sem recodificar)
+        args.push("-c", "copy");
+      }
+
+      args.push("-y", outName);
+
+      await ffmpeg.run(...args);
+
+      // Exporta
+      const data = ffmpeg.FS("readFile", outName);
+      const url = URL.createObjectURL(
+        new Blob([data.buffer], { type: kind === "audio" ? "audio/mp3" : "video/mp4" })
+      );
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = outName;
+      a.click();
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Falha ao processar o arquivo.");
+    } finally {
+      setProcessing(false);
+      setTimeout(() => setProgress(0), 400);
+    }
+  };
+  const clearAll = () => {
+    if (mediaRef.current) {
+      try { mediaRef.current.pause(); } catch { }
     }
 
-    args.push("-y", outName);
+    if (srcUrl && srcUrl.startsWith("blob:")) URL.revokeObjectURL(srcUrl);
 
-    await ffmpeg.run(...args);
-
-    // Exporta
-    const data = ffmpeg.FS("readFile", outName);
-    const url = URL.createObjectURL(
-      new Blob([data.buffer], { type: kind === "audio" ? "audio/mp3" : "video/mp4" })
-    );
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = outName;
-    a.click();
-
-  } catch (err) {
-    console.error(err);
-    toast.error("Falha ao processar o arquivo.");
-  } finally {
+    setSrcUrl("");
+    setFile(null);
+    setKind(null);
+    setDuration(0);
+    setCurrent(0);
+    setStartMark(0);
+    setEndMark(0);
+    setProgress(0);
     setProcessing(false);
-    setTimeout(() => setProgress(0), 400);
-  }
-};
-  const clearAll = () => {
-  if (mediaRef.current) {
-    try { mediaRef.current.pause(); } catch {}
-  }
 
-  if (srcUrl && srcUrl.startsWith("blob:")) URL.revokeObjectURL(srcUrl);
-
-  setSrcUrl("");
-  setFile(null);
-  setKind(null);
-  setDuration(0);
-  setCurrent(0);
-  setStartMark(0);
-  setEndMark(0);
-  setProgress(0);
-  setProcessing(false);
-
-  toast.info("Limpado.");
-};
+    toast.info("Limpado.");
+  };
 
   return (
     <div className="flex-grow flex flex-col bg-gradient-to-br from-slate-50 via-purple-50 to-slate-100">
@@ -384,30 +416,58 @@ const exportClip = async () => {
                 </div>
 
                 {/* Final Actions */}
-                <div className="flex flex-col md:flex-row gap-3 md:gap-6 items-center justify-between pt-4">
-                  <Button
-                    size="lg"
-                    className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-lg px-8 py-4 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
-                    onClick={exportClip}
-                    disabled={processing || !srcUrl || endMark <= startMark}
-                  >
-                    {processing ? `Processando... ${progress}%` : "Exportar Corte"}
-                  </Button>
+                <div className="flex flex-col gap-4 pt-4">
 
-                  <div className="w-full md:w-auto">
-                    <Progress value={progress} className="h-3" />
+                  {/* Options */}
+                  <div className="flex items-center gap-4 bg-slate-100 p-3 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="vertical-mode"
+                        checked={vertical}
+                        onCheckedChange={setVertical}
+                        disabled={processing}
+                      />
+                      <Label htmlFor="vertical-mode" className="cursor-pointer text-slate-700 font-medium">
+                        Converter para Vertical (TikTok/Reels)
+                      </Label>
+                    </div>
+                    {vertical && (
+                      <span className="text-xs text-amber-600 font-bold animate-pulse">
+                        (Requer recodificação • Mais lento)
+                      </span>
+                    )}
+                    {!vertical && (
+                      <span className="text-xs text-green-600 font-bold">
+                        (Instantâneo • Cópia direta)
+                      </span>
+                    )}
                   </div>
 
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    onClick={clearAll}
-                    disabled={processing}
-                    className="disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 className="w-5 h-5 mr-2" />
-                    Limpar tudo
-                  </Button>
+                  <div className="flex flex-col md:flex-row gap-3 md:gap-6 items-center justify-between">
+                    <Button
+                      size="lg"
+                      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-lg px-8 py-4 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
+                      onClick={exportClip}
+                      disabled={processing || !srcUrl || endMark <= startMark}
+                    >
+                      {processing ? `Processando... ${progress}%` : "Exportar Corte"}
+                    </Button>
+
+                    <div className="w-full md:w-auto flex-1 mx-4">
+                      <Progress value={progress} className="h-3" />
+                    </div>
+
+                    <Button
+                      size="lg"
+                      variant="destructive"
+                      onClick={clearAll}
+                      disabled={processing}
+                      className="disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 className="w-5 h-5 mr-2" />
+                      Limpar tudo
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
