@@ -4,10 +4,11 @@ import { Upload, Play, Pause, Trash2, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { ensureFFmpeg } from "@/lib/ffmpeg";
+import { ensureFFmpeg, setFFmpegContext } from "@/lib/ffmpeg";
 import LightLogo from "@/assets/LightLogo.svg";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { track } from "@/lib/analytics";
 
 const SAMPLE_FILE_URL = "/sample-demo.mp4";
 
@@ -100,6 +101,10 @@ export default function FreePage(): JSX.Element {
     setCurrent(0);
 
     toast.success(`Arquivo carregado: ${f.name}`);
+    track("file_selected", {
+      type: f.type,
+      size: f.size,
+    });
   };
 
   const onDrop = (e: React.DragEvent) => {
@@ -114,8 +119,35 @@ export default function FreePage(): JSX.Element {
     setCurrent(t);
   };
 
-  const setStartToCurrent = () => setStartMark(Math.min(current, endMark));
-  const setEndToCurrent = () => setEndMark(Math.max(current, startMark));
+  const setStartToCurrent = () => {
+    setStartMark(Math.min(current, endMark));
+    track("marker_set", { start: Math.min(current, endMark), end: endMark });
+  };
+  const setEndToCurrent = () => {
+    setEndMark(Math.max(current, startMark));
+    track("marker_set", { start: startMark, end: Math.max(current, startMark) });
+  };
+
+  const handleVerticalToggle = (enabled: boolean) => {
+    setVertical(enabled);
+    track("vertical_mode_toggled", {
+      enabled,
+      file_type: kind,
+      duration_sec: duration,
+    });
+
+    if (enabled) {
+      track("vertical_preview_enabled", {
+        verticalMode: true,
+        file_type: kind,
+      });
+    } else {
+      track("vertical_preview_disabled", {
+        verticalMode: false,
+        file_type: kind,
+      });
+    }
+  };
 
   /**
    * exportClip - CORRIGIDO
@@ -130,6 +162,16 @@ export default function FreePage(): JSX.Element {
 
     setProcessing(true);
     setProgress(0);
+
+    // Set context for worker errors
+    setFFmpegContext({ kind: kind || "unknown", vertical });
+
+    track("export_started", {
+      start_ms: startMark * 1000,
+      end_ms: endMark * 1000,
+      vertical: vertical,
+      file_type: kind,
+    });
 
     const loadToast = toast.loading("Inicializando FFmpeg...");
 
@@ -213,14 +255,25 @@ export default function FreePage(): JSX.Element {
       a.download = outName;
       a.click();
 
-    } catch (err) {
+      track("export_success", {
+        final_ms: durationSec * 1000,
+        vertical: vertical,
+        file_type: kind,
+        browser: navigator.userAgent,
+      });
+
+    } catch (err: any) {
       console.error(err);
       toast.error("Falha ao processar o arquivo.");
+      track("export_failed", {
+        error: err.message || String(err)
+      });
     } finally {
       setProcessing(false);
       setTimeout(() => setProgress(0), 400);
     }
   };
+
   const clearAll = () => {
     if (mediaRef.current) {
       try { mediaRef.current.pause(); } catch { }
@@ -424,7 +477,7 @@ export default function FreePage(): JSX.Element {
                       <Switch
                         id="vertical-mode"
                         checked={vertical}
-                        onCheckedChange={setVertical}
+                        onCheckedChange={handleVerticalToggle}
                         disabled={processing}
                       />
                       <Label htmlFor="vertical-mode" className="cursor-pointer text-slate-700 font-medium">

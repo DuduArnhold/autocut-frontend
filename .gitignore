@@ -83,3 +83,5 @@ coverage/
 
 # ───── Old config ─────
 supabase/
+
+.vercel
