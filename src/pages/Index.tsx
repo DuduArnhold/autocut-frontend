@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Scissors, Sparkles, ShieldCheck } from "lucide-react";
 import heroWaves from "@/assets/hero-waves.jpg";
@@ -10,7 +11,7 @@ import logo from "@/assets/logo.svg";
 const Landing = () => {
   return (
     <div className="min-h-screen flex flex-col bg-white text-slate-900 antialiased">
-    
+
       {/* HERO */}
       <header className="relative overflow-hidden">
         <div
@@ -36,11 +37,13 @@ const Landing = () => {
 
           <div className="flex flex-col items-center mt-10">
             <Button
+              asChild
               className="flex items-center justify-center gap-3 px-10 py-8 text-2xl font-bold shadow-2xl bg-purple-600 hover:bg-purple-700 text-white rounded-2xl transform hover:scale-[1.03] transition-all"
-              onClick={() => (window.location.href = "/free")}
             >
-              Começar Agora — Grátis e Sem Login
-              <ArrowRight className="!w-10 !h-10 ml-3" size={32}/>
+              <Link to="/free">
+                Começar Agora — Grátis e Sem Login
+                <ArrowRight className="!w-10 !h-10 ml-3" size={32} />
+              </Link>
             </Button>
 
             <p className="text-slate-500 text-sm mt-4">
@@ -124,11 +127,13 @@ const Landing = () => {
         <p className="text-slate-600 mb-10">Gratuito, ilimitado e totalmente seguro.</p>
 
         <Button
+          asChild
           className="px-8 py-8 text-lg font-semibold"
-          onClick={() => (window.location.href = "/free")}
         >
-          Acessar a ferramenta gratuita
-          <ArrowRight className="!w-8 !h-8 ml-2" />
+          <Link to="/free">
+            Acessar a ferramenta gratuita
+            <ArrowRight className="!w-8 !h-8 ml-2" />
+          </Link>
         </Button>
       </section>
 
@@ -140,7 +145,7 @@ const Landing = () => {
             <img src={LightLogo} alt="AutoCut Logo" className="w-10 h-10 opacity-90" />
             <span className="text-xl font-bold text-white">AutoCut</span>
           </div>
-          
+
           <div className="text-center text-sm text-white/70">
             AutoCut © 2025 — Processamento local • Nenhum dado enviado para servidores
           </div>
