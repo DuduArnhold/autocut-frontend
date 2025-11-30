@@ -198,8 +198,8 @@ export default function FreePage(): JSX.Element {
 
       // Argumentos OTIMIZADOS
       const args: string[] = [
+        "-ss", String(startMark),  // ANTES do -i para seek preciso
         "-i", inputName,
-        "-ss", String(startMark),
         "-t", String(durationSec),
         "-avoid_negative_ts", "make_zero",
       ];
@@ -237,7 +237,8 @@ export default function FreePage(): JSX.Element {
         args.push("-c:a", "aac");
       } else {
         // MODO RÁPIDO: Stream Copy (sem recodificar)
-        args.push("-c", "copy");
+        args.push("-c:v", "copy");
+        args.push("-c:a", "copy");
       }
 
       args.push("-y", outName);
