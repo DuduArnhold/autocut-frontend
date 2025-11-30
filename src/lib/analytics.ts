@@ -21,6 +21,7 @@ export function initAnalytics() {
     script.id = "plausible-script";
     script.src = "https://plausible.io/js/pa-91AC9E-tVaDSOrSsmAREV.js";
     script.async = true;
+    script.crossOrigin = "anonymous"; // CRITICAL: Makes it COEP-compatible
 
     script.onload = () => {
         console.log("[Analytics] Plausible script loaded.");
