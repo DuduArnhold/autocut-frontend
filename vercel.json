@@ -1,7 +1,7 @@
 {
     "rewrites": [
         {
-            "source": "/((?!api/.*).*)",
+            "source": "/((?!api/.*|ffmpeg-core\\.(js|wasm|worker\\.js)).*)",
             "destination": "/index.html"
         }
     ],
