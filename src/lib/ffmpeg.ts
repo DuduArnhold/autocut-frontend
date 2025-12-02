@@ -13,7 +13,7 @@ export const ensureFFmpeg = async (setProgress: (n: number) => void) => {
 
   ffmpegInstance = createFFmpeg({
     log: true,
-    corePath: "/ffmpeg-core.js",
+    corePath: "/ffmpeg/ffmpeg-core.js",
     progress: ({ ratio }) => {
       const pct = Math.min(100, Math.max(0, Math.round(ratio * 100)));
       setProgress(pct);
