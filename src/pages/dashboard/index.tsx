@@ -187,7 +187,7 @@ export default function Dashboard() {
                         {autoRefresh ? 'Live' : 'Paused'}
                     </Button>
 
-                    <Button variant="outline" size="sm" onClick={fetchSummary}>
+                    <Button variant="secondary" size="sm" onClick={fetchSummary}>
                         Refresh
                     </Button>
                 </div>
@@ -259,7 +259,15 @@ export default function Dashboard() {
                                         fontSize={12}
                                         tickLine={false}
                                         axisLine={false}
-                                        interval={data?.meta.granularity === 'hour' ? 3 : 0}
+                                        minTickGap={30}
+                                        tickFormatter={(value) => {
+                                            if (data?.meta.granularity === 'day') {
+                                                // Format as "Dec 01" for daily view
+                                                const date = new Date(value);
+                                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                            }
+                                            return value; // Keep hourly format as is (e.g., "14:00")
+                                        }}
                                     />
                                     <YAxis
                                         stroke="#888888"
@@ -288,36 +296,30 @@ export default function Dashboard() {
                     <CardContent>
                         <div className="space-y-6 py-4">
                             {/* Step 1: Loaded */}
-                            <div className="relative">
-                                <div className="bg-slate-100 p-4 rounded-lg border border-slate-200 flex justify-between items-center z-10 relative">
-                                    <span className="font-medium">App Loaded</span>
-                                    <span className="font-bold">{data?.funnel.loaded}</span>
-                                </div>
-                                <div className="absolute left-1/2 -bottom-4 w-0.5 h-4 bg-slate-300 -translate-x-1/2"></div>
+                            <div className="bg-slate-100 p-4 rounded-lg border border-slate-200 flex justify-between items-center">
+                                <span className="font-medium text-slate-900">App Loaded</span>
+                                <span className="font-bold text-slate-900">{data?.funnel.loaded}</span>
                             </div>
 
                             {/* Step 2: Started Export */}
-                            <div className="relative">
-                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex justify-between items-center z-10 relative">
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex flex-col gap-1">
+                                <div className="flex justify-between items-center">
                                     <span className="font-medium text-blue-900">Started Export</span>
                                     <span className="font-bold text-blue-900">{data?.funnel.started_export}</span>
                                 </div>
-                                <div className="absolute left-1/2 -bottom-4 w-0.5 h-4 bg-slate-300 -translate-x-1/2"></div>
-                                {/* Conversion Rate Badge */}
-                                <div className="absolute right-0 -top-3 translate-x-2 bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded-full">
-                                    {data?.funnel.loaded ? Math.round((data.funnel.started_export / data.funnel.loaded) * 100) : 0}%
+                                <div className="text-xs text-blue-700 text-right">
+                                    {data?.funnel.loaded ? Math.round((data.funnel.started_export / data.funnel.loaded) * 100) : 0}% conversion
                                 </div>
                             </div>
 
                             {/* Step 3: Success */}
-                            <div className="relative">
-                                <div className="bg-green-50 p-4 rounded-lg border border-green-100 flex justify-between items-center z-10 relative shadow-sm">
+                            <div className="bg-green-50 p-4 rounded-lg border border-green-100 flex flex-col gap-1 shadow-sm">
+                                <div className="flex justify-between items-center">
                                     <span className="font-medium text-green-900">Export Success</span>
                                     <span className="font-bold text-green-900">{data?.funnel.success}</span>
                                 </div>
-                                {/* Conversion Rate Badge */}
-                                <div className="absolute right-0 -top-3 translate-x-2 bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded-full">
-                                    {data?.funnel.started_export ? Math.round((data.funnel.success / data.funnel.started_export) * 100) : 0}%
+                                <div className="text-xs text-green-700 text-right">
+                                    {data?.funnel.started_export ? Math.round((data.funnel.success / data.funnel.started_export) * 100) : 0}% completion
                                 </div>
                             </div>
                         </div>
