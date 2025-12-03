@@ -67,10 +67,13 @@ ffmpeg-core.temp.json
 ffmpeg.wasm
 ffmpeg.worker.js
 
-# Somente ignore se forem baixados localmente:
+# Somente ignore se forem baixados localmente (exceto se estiverem em public/ffmpeg):
 public/ffmpeg-core.js
 public/ffmpeg-core.wasm
 public/ffmpeg-core.worker.js
+!public/ffmpeg/ffmpeg-core.js
+!public/ffmpeg/ffmpeg-core.wasm
+!public/ffmpeg/ffmpeg-core.worker.js
 
 # ───── Coverage ─────
 coverage/
