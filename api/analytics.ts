@@ -7,11 +7,17 @@ import os from 'os';
 const DB_FILE = path.join(os.tmpdir(), 'autocut_events.json');
 const MAX_EVENTS = 1000;
 
-// Supabase client
+// Supabase client (using SERVICE_ROLE_KEY for admin access in serverless functions)
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = supabaseUrl && supabaseKey
-    ? createClient(supabaseUrl, supabaseKey)
+    ? createClient(supabaseUrl, supabaseKey, {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
+        }
+    })
     : null;
 
 // Fallback file storage helpers (for local dev without Supabase)
