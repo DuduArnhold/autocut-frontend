@@ -25,15 +25,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from('analytics_events')
                 .select('id', { count: 'exact', head: true })
                 .eq('event', step)
-            return res.status(200).json({
-                meta: { from, to },
-                funnel: {
-                    steps,
-                    overall_conversion: overallConversion,
-                },
-            });
-        } catch (err) {
-            console.error('[API ERROR]', err);
-            return res.status(500).json({ error: 'Internal server error' });
+                .gte('timestamp', from || '1970-01-01')
+                .lte('timestamp', to || new Date().toISOString());
+
+            results[step] = count || 0;
         }
+
+        // Calculate conversion rates (always relative to first step)
+        const firstStepValue = results[STEPS[0]] || 1;
+        const steps = STEPS.map((step, index) => {
+            const value = results[step] || 0;
+            const conversion = index === 0
+                ? 100
+                : Math.round((value / firstStepValue) * 100);
+
+            return {
+                name: step,
+                value,
+                conversion,
+            };
+        });
+
+        const overallConversion = results['app_loaded'] === 0
+            ? 0
+            : Math.round(((results['export_success'] || 0) / results['app_loaded']) * 100);
+
+        return res.status(200).json({
+            meta: { from, to },
+            funnel: {
+                steps,
+                overall_conversion: overallConversion,
+            },
+        });
+    } catch (err) {
+        console.error('[API ERROR]', err);
+        return res.status(500).json({ error: 'Internal server error' });
     }
+}
