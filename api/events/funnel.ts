@@ -1,5 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sb, handleError } from '../../src/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const sb = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+    }
+});
 
 const STEPS = ['app_loaded', 'file_selected', 'export_started', 'export_success'];
 
@@ -46,6 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
         });
     } catch (err) {
-        return handleError(res, err);
+        console.error('[API ERROR]', err);
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
