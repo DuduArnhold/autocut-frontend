@@ -8,6 +8,16 @@ const sb = createClient(supabaseUrl, supabaseKey, {
         persistSession: false,
         autoRefreshToken: false,
         detectSessionInUrl: false
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const sb = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
     }
 });
 
@@ -19,16 +29,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const results: Record<string, number> = {};
 
-        // Get counts for each step
+        // Get UNIQUE SESSION counts for each step
         for (const step of STEPS) {
-            const { count } = await sb
+            const { data, error } = await sb
                 .from('analytics_events')
-                .select('id', { count: 'exact', head: true })
+                .select('session_id')
                 .eq('event', step)
                 .gte('timestamp', from || '1970-01-01')
                 .lte('timestamp', to || new Date().toISOString());
 
-            results[step] = count || 0;
+            if (error) throw error;
+
+            // Count unique sessions
+            const uniqueSessions = new Set(data?.map(d => d.session_id) || []);
+            results[step] = uniqueSessions.size;
         }
 
         // Calculate conversion rates (always relative to first step)
