@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sb, handleError } from '../supabase.ts';
+import { sb, handleError } from '../../src/lib/supabase';
 
 const STEPS = ['app_loaded', 'file_selected', 'export_started', 'export_success'];
 

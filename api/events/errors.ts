@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sb, handleError } from '../supabase.ts';
+import { sb, handleError } from '../../src/lib/supabase';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
