@@ -4,11 +4,8 @@ import App from "./App.tsx";
 import "./index.css";
 import { initAnalytics, track } from "@/lib/analytics";
 
-// Inicializa Analytics (Plausible)
+// Inicializa Analytics
 initAnalytics();
-
-// Rastreia carregamento da aplicação
-track("app_loaded");
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>

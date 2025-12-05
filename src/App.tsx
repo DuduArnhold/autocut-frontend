@@ -4,7 +4,7 @@ import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button"; // Mantida a importação
 import Landing from "./pages/Index";
 import FreePage from "./pages/free";
-import Dashboard from "./pages/dashboard";
+import Dashboard from "./pages/Dashboard";
 
 // A importação já estava correta, mantida aqui.
 import logoAutoCut from '../src/assets/logo.svg';

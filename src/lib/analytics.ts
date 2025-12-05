@@ -13,14 +13,21 @@ interface AnalyticsEvent {
     timestamp: string;
     sessionId: string;
     userAgent: string;
+    metadata?: {
+        url: string;
+        referrer: string;
+        screen_width: number;
+        screen_height: number;
+        language: string;
+    };
 }
 
-// Generate or retrieve session ID
+// Generate or retrieve session ID (Persistent)
 const getSessionId = (): string => {
-    let sessionId = sessionStorage.getItem('analytics_session_id');
+    let sessionId = localStorage.getItem('analytics_session_id');
     if (!sessionId) {
-        sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        sessionStorage.setItem('analytics_session_id', sessionId);
+        sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('analytics_session_id', sessionId);
     }
     return sessionId;
 };
@@ -46,6 +53,13 @@ export async function track(event: string, payload: AnalyticsPayload = {}): Prom
             timestamp: new Date().toISOString(),
             sessionId: getSessionId(),
             userAgent: navigator.userAgent,
+            metadata: {
+                url: window.location.href,
+                referrer: document.referrer,
+                screen_width: window.screen.width,
+                screen_height: window.screen.height,
+                language: navigator.language
+            }
         };
 
         // Send to analytics endpoint

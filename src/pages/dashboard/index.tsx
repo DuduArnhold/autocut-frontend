@@ -52,6 +52,9 @@ export default function Dashboard() {
         to: new Date(),
     });
 
+    // Funnel State
+    const [funnelData, setFunnelData] = useState<any>(null);
+
     const fetchSummary = async () => {
         try {
             setLoading(true);
@@ -77,11 +80,19 @@ export default function Dashboard() {
                 to: to.toISOString()
             });
 
-            const response = await fetch(`/api/analytics/summary?${params.toString()}`);
-            if (!response.ok) throw new Error('Failed to fetch analytics summary');
+            // Parallel fetch: Summary + Funnel
+            const [summaryRes, funnelRes] = await Promise.all([
+                fetch(`/api/analytics/summary?${params.toString()}`),
+                fetch(`/api/analytics/funnel?${params.toString()}`)
+            ]);
 
-            const summary: AnalyticsSummary = await response.json();
+            if (!summaryRes.ok || !funnelRes.ok) throw new Error('Failed to fetch analytics');
+
+            const summary: AnalyticsSummary = await summaryRes.json();
+            const funnel = await funnelRes.json();
+
             setData(summary);
+            setFunnelData(funnel);
             setError(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Unknown error');
@@ -99,6 +110,16 @@ export default function Dashboard() {
         const interval = setInterval(fetchSummary, 30000);
         return () => clearInterval(interval);
     }, [autoRefresh, rangePreset, customDate]);
+
+    // DEBUG: Capture unhandled rejections
+    useEffect(() => {
+        const handler = (event: PromiseRejectionEvent) => {
+            console.error('[Dashboard Unhandled Rejection]', event.reason);
+            // Optional: setError(String(event.reason));
+        };
+        window.addEventListener('unhandledrejection', handler);
+        return () => window.removeEventListener('unhandledrejection', handler);
+    }, []);
 
     // Helper for date display
     const getDateLabel = () => {
@@ -135,9 +156,7 @@ export default function Dashboard() {
         );
     }
 
-    const successRate = data?.funnel.started_export
-        ? Math.round((data.funnel.success / data.funnel.started_export) * 100)
-        : 0;
+    const successRate = funnelData?.funnel.overall_conversion || 0;
 
     return (
         <div className="container mx-auto p-6 space-y-8 bg-slate-50/50 min-h-screen">
@@ -197,15 +216,15 @@ export default function Dashboard() {
             <div className="grid gap-4 md:grid-cols-3">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Exports</CardTitle>
+                        <CardTitle className="text-sm font-medium">Total Sessions</CardTitle>
                         <Download className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {data?.last_24h.exports}
+                            {funnelData?.meta.total_sessions || 0}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Completed in selected range
+                            Unique visits in range
                         </p>
                     </CardContent>
                 </Card>
@@ -225,7 +244,7 @@ export default function Dashboard() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+                        <CardTitle className="text-sm font-medium">Overall Conversion</CardTitle>
                         <CheckCircle className="h-4 w-4 text-green-600" />
                     </CardHeader>
                     <CardContent>
@@ -233,7 +252,7 @@ export default function Dashboard() {
                             {successRate}%
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Start Export → Success conversion
+                            Session Loaded → Success
                         </p>
                     </CardContent>
                 </Card>
@@ -290,38 +309,39 @@ export default function Dashboard() {
                 {/* Funnel */}
                 <Card className="col-span-3">
                     <CardHeader>
-                        <CardTitle>Conversion Funnel</CardTitle>
-                        <CardDescription>User journey in selected range</CardDescription>
+                        <CardTitle>Session Funnel</CardTitle>
+                        <CardDescription>User journey by unique session</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-6 py-4">
-                            {/* Step 1: Loaded */}
-                            <div className="bg-slate-100 p-4 rounded-lg border border-slate-200 flex justify-between items-center">
-                                <span className="font-medium text-slate-900">App Loaded</span>
-                                <span className="font-bold text-slate-900">{data?.funnel.loaded}</span>
-                            </div>
-
-                            {/* Step 2: Started Export */}
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex flex-col gap-1">
-                                <div className="flex justify-between items-center">
-                                    <span className="font-medium text-blue-900">Started Export</span>
-                                    <span className="font-bold text-blue-900">{data?.funnel.started_export}</span>
+                            {funnelData?.funnel.steps.map((step: any, index: number) => (
+                                <div key={step.id} className={`p-4 rounded-lg border flex flex-col gap-1 shadow-sm ${step.id === 'loaded' ? 'bg-slate-100 border-slate-200' :
+                                    step.id === 'started' ? 'bg-blue-50 border-blue-100' :
+                                        'bg-green-50 border-green-100'
+                                    }`}>
+                                    <div className="flex justify-between items-center">
+                                        <span className={`font-medium ${step.id === 'loaded' ? 'text-slate-900' :
+                                            step.id === 'started' ? 'text-blue-900' :
+                                                'text-green-900'
+                                            }`}>{step.label}</span>
+                                        <span className={`font-bold ${step.id === 'loaded' ? 'text-slate-900' :
+                                            step.id === 'started' ? 'text-blue-900' :
+                                                'text-green-900'
+                                            }`}>{step.count}</span>
+                                    </div>
+                                    {index > 0 && (
+                                        <div className="flex justify-between text-xs mt-1">
+                                            <span className="text-red-500 font-medium">
+                                                {step.drop_off_count > 0 ? `${step.drop_off_count} dropped off` : ''}
+                                            </span>
+                                            <span className={`${step.id === 'started' ? 'text-blue-700' : 'text-green-700'
+                                                }`}>
+                                                {step.conversion_rate}% conversion
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="text-xs text-blue-700 text-right">
-                                    {data?.funnel.loaded ? Math.round((data.funnel.started_export / data.funnel.loaded) * 100) : 0}% conversion
-                                </div>
-                            </div>
-
-                            {/* Step 3: Success */}
-                            <div className="bg-green-50 p-4 rounded-lg border border-green-100 flex flex-col gap-1 shadow-sm">
-                                <div className="flex justify-between items-center">
-                                    <span className="font-medium text-green-900">Export Success</span>
-                                    <span className="font-bold text-green-900">{data?.funnel.success}</span>
-                                </div>
-                                <div className="text-xs text-green-700 text-right">
-                                    {data?.funnel.started_export ? Math.round((data.funnel.success / data.funnel.started_export) * 100) : 0}% completion
-                                </div>
-                            </div>
+                            ))}
                         </div>
                     </CardContent>
                 </Card>
