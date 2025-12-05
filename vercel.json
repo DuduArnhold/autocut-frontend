@@ -1,7 +1,7 @@
 {
     "rewrites": [
         {
-            "source": "/((?!api/.*|ffmpeg/.*|@.*|src/.*|node_modules/.*).*)",
+            "source": "/((?!api/.*|ffmpeg/.*|@vite/.*|src/.*|node_modules/.*).*)",
             "destination": "/index.html"
         }
     ],
@@ -10,15 +10,11 @@
             "source": "/(.*)",
             "headers": [
                 {
-                    "key": "Cross-Origin-Opener-Policy",
-                    "value": "same-origin"
-                },
-                {
                     "key": "Cross-Origin-Embedder-Policy",
                     "value": "require-corp"
                 },
                 {
-                    "key": "Cross-Origin-Resource-Policy",
+                    "key": "Cross-Origin-Opener-Policy",
                     "value": "same-origin"
                 }
             ]

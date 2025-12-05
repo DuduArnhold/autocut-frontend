@@ -31,15 +31,63 @@ export default function Dashboard() {
     const [timeseries, setTimeseries] = useState<any[]>([]);
     const [errors, setErrors] = useState<ErrorEvent[]>([]);
     const [loading, setLoading] = useState(true);
+    const [authError, setAuthError] = useState(false);
 
     useEffect(() => {
-        loadData();
+        checkAuthAndLoadData();
     }, []);
 
-    async function loadData() {
+    async function checkAuthAndLoadData() {
         try {
             setLoading(true);
 
+            // Check authentication first
+            const authResponse = await fetch('/api/auth-check', {
+                headers: {
+                    'Authorization': localStorage.getItem('dashboardAuth') || ''
+                }
+            });
+
+            if (authResponse.status === 401) {
+                // Prompt for credentials
+                const username = prompt('Username:');
+                const password = prompt('Password:');
+
+                if (!username || !password) {
+                    setAuthError(true);
+                    setLoading(false);
+                    return;
+                }
+
+                const authHeader = 'Basic ' + btoa(`${username}:${password}`);
+
+                // Try auth again with credentials
+                const retryAuth = await fetch('/api/auth-check', {
+                    headers: { 'Authorization': authHeader }
+                });
+
+                if (retryAuth.status === 401) {
+                    alert('Invalid credentials');
+                    setAuthError(true);
+                    setLoading(false);
+                    return;
+                }
+
+                // Save credentials
+                localStorage.setItem('dashboardAuth', authHeader);
+            }
+
+            // Load dashboard data
+            await loadData();
+        } catch (error) {
+            console.error('Auth error:', error);
+            setAuthError(true);
+            setLoading(false);
+        }
+    }
+
+    async function loadData() {
+        try {
             // Last 30 days
             const to = dayjs().toISOString();
             const from = dayjs().subtract(30, 'days').toISOString();
@@ -60,6 +108,27 @@ export default function Dashboard() {
         } finally {
             setLoading(false);
         }
+    }
+
+    if (authError) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
+                    <p className="text-gray-600 mb-4">Invalid credentials</p>
+                    <button
+                        onClick={() => {
+                            localStorage.removeItem('dashboardAuth');
+                            setAuthError(false);
+                            checkAuthAndLoadData();
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     if (loading) {
