@@ -42,16 +42,19 @@ export default function Dashboard() {
             setLoading(true);
 
             // Check authentication first
+            const storedAuth = localStorage.getItem('dashboardAuth');
+            let authHeader = storedAuth;
+
             const authResponse = await fetch('/api/auth-check', {
                 headers: {
-                    'Authorization': localStorage.getItem('dashboardAuth') || ''
+                    'Authorization': authHeader || ''
                 }
             });
 
             if (authResponse.status === 401) {
                 // Prompt for credentials
-                const username = prompt('Username:');
-                const password = prompt('Password:');
+                const username = prompt('Dashboard Username:');
+                const password = prompt('Dashboard Password:');
 
                 if (!username || !password) {
                     setAuthError(true);
@@ -59,7 +62,7 @@ export default function Dashboard() {
                     return;
                 }
 
-                const authHeader = 'Basic ' + btoa(`${username}:${password}`);
+                authHeader = 'Basic ' + btoa(username + ':' + password);
 
                 // Try auth again with credentials
                 const retryAuth = await fetch('/api/auth-check', {
@@ -67,14 +70,15 @@ export default function Dashboard() {
                 });
 
                 if (retryAuth.status === 401) {
-                    alert('Invalid credentials');
+                    alert('Invalid credentials. Please check your username and password.');
                     setAuthError(true);
                     setLoading(false);
                     return;
                 }
 
-                // Save credentials
+                // Save credentials on success
                 localStorage.setItem('dashboardAuth', authHeader);
+                console.log('✅ Authentication successful! Credentials saved.');
             }
 
             // Load dashboard data
